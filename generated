@@ -1,0 +1,36 @@
+{
+    "META": {
+        "offset": 0,
+        "charter": "",
+        "composer": "",
+        "name": "Generated",
+        "song": "0.mp3",
+        "background": "0.png"
+    },
+    "BPMList": [{
+            "bpm": 229.9961,
+            "startTime": [
+                0,
+                0,
+                96
+            ]
+        },
+        {
+            "bpm": 229.9961,
+            "startTime": [
+                0,
+                0,
+                96
+            ]
+        },
+        {
+            "bpm": 229.9961,
+            "startTime": [
+                0,
+                0,
+                96
+            ]
+        }
+    ],
+    "judgeLineList": []
+}
