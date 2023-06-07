@@ -205,15 +205,21 @@ struct Args {
     midi_path: String,
     /// Id of the target chart.
     #[arg(long = "id")]
-    target_id: i32,
+    target_id: Option<i32>,
     /// Song file referred in the chart.
     #[arg(long)]
     song_file: Option<String>,
     /// Background image referred in the chart.
     #[arg(long)]
     background_file: Option<String>,
+    /// The path of the conversation result.
     #[arg(short, long = "output")]
     output_path: Option<String>,
+    /// seprate the keys.
+    #[arg(short, long = "seprate")]
+    sepration_rate: Option<f32>,
+    #[arg(short = 'v')]
+    speed: Option<f32>,
 }
 
 fn main() {
@@ -238,7 +244,10 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         song_file,
         background_file,
         output_path,
+        sepration_rate,
+        speed,
     } = args;
+    let target_id = target_id.unwrap_or(114514);
     let song_file = song_file.unwrap_or(target_id.to_string() + ".mp3");
     let background_file = background_file.unwrap_or(target_id.to_string() + ".png");
     let output_path = output_path.unwrap_or(target_id.to_string() + ".json");
@@ -254,6 +263,27 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     fill_meta(&mut chart.meta, &smf, song_file, background_file);
     fill_bpm(&mut chart.bpm_list, &smf, ticks_per_beat);
     fill_lines(&mut chart, &smf, ticks_per_beat);
+    if let Some(rate) = sepration_rate {
+        chart
+            .judge_line_list
+            .iter_mut()
+            .flat_map(|l| l.notes.iter_mut())
+            .for_each(|n| n.position_x *= rate)
+    }
+    if let Some(speed) = speed {
+        chart.judge_line_list.iter_mut().for_each(|j| {
+            if let Some(Some(RPEEventLayer {
+                speed_events: Some(vec),
+                ..
+            })) = j.event_layers.get_mut(0)
+            {
+                if let Some(RPESpeedEvent { start, end, .. }) = vec.get_mut(0) {
+                    *start = speed;
+                    *end = speed;
+                }
+            }
+        })
+    }
     serde_json::to_writer(File::create(output_path)?, &chart)?;
     Ok(())
 }
