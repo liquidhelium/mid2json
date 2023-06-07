@@ -30,4 +30,4 @@ Or, you can just drag the midi file and drop it on this application.
 Note that it won't pack the zip file for you.
 
 (This one can be seen as the improved version of [mid2json.py](https://github.com/liquidhelium/mid2json.py).)  
-(Special thanks to @MivikQ, for the definitions in [prpr](https://github.com/Mivik/prpr))
+(Special thanks to @Mivik, for the definitions in [prpr](https://github.com/Mivik/prpr))
