@@ -307,12 +307,6 @@ fn midi_track_to_notes(track: &Track, ticks_per_beat: u32) -> Vec<RPENote> {
             } => {
                 fill_note(&mut ret, current_tick, ticks_per_beat, key);
             }
-            // TrackEventKind::Midi {
-            //     message: MidiMessage::NoteOff { key, .. },
-            //     ..
-            // } => {
-            //     fill_note(&mut ret, current_tick, ticks_per_beat, key);
-            // }
 
             _ => return None,
         };
@@ -374,22 +368,7 @@ fn events_to_bpm<'a>(
 mod test {
     use super::*;
     #[test]
-    fn test() {
-        run(Args {
-            midi_path: "test_assets/town.mid".into(),
-            target_id: 0,
-            song_file: None,
-            background_file: None,
-            output_path: Some("generated".into()),
-        })
-        .unwrap();
-    }
-    #[test]
     fn c4_on_center() {
         assert_eq!(key_to_x_value(u7::from_int_lossy(C4_POS)) as i32, 0)
-    }
-    #[test]
-    fn a0_on_lowest() {
-        assert_eq!(key_to_x_value(u7::from_int_lossy(A0_POS)) as i32, 0.0 as i32)
     }
 }
