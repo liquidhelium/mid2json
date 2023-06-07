@@ -3,9 +3,12 @@
 use std::{
     borrow::Cow,
     collections::HashMap,
-    error::Error,
+    error,
+    ffi::OsStr,
+    fmt::Display,
     fs::{self, File},
     io,
+    path::PathBuf,
 };
 
 use clap::Parser;
@@ -202,25 +205,35 @@ struct RPEChart {
 struct Args {
     /// Name of the input file.
     #[arg()]
-    midi_path: String,
+    midi_path: PathBuf,
     /// Id of the target chart.
     #[arg(long = "id")]
     target_id: Option<i32>,
     /// Song file referred in the chart.
     #[arg(long)]
-    song_file: Option<String>,
+    song_file: Option<PathBuf>,
     /// Background image referred in the chart.
     #[arg(long)]
-    background_file: Option<String>,
+    background_file: Option<PathBuf>,
     /// The path of the conversation result.
     #[arg(short, long = "output")]
-    output_path: Option<String>,
+    output_path: Option<PathBuf>,
     /// seprate the keys.
     #[arg(short, long = "seprate")]
     sepration_rate: Option<f32>,
     #[arg(short = 'v')]
     speed: Option<f32>,
 }
+
+#[derive(Debug)]
+struct Error(&'static str);
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0)?;
+        Ok(())
+    }
+}
+impl error::Error for Error {}
 
 fn main() {
     run(Args::parse()).unwrap_or_else(|e| {
@@ -230,29 +243,18 @@ fn main() {
     })
 }
 
-fn detailed_errmsg(e: Box<dyn Error>) {
+fn detailed_errmsg(e: Box<dyn error::Error>) {
     e.downcast_ref::<io::Error>()
         .map(|_| eprintln!("..when tried to open the file"));
     e.downcast_ref::<midly::Error>()
         .map(|_| eprintln!("..when tried to read the midi file."));
 }
 
-fn run(args: Args) -> Result<(), Box<dyn Error>> {
-    let Args {
-        midi_path: name,
-        target_id,
-        song_file,
-        background_file,
-        output_path,
-        sepration_rate,
-        speed,
-    } = args;
-    let target_id = target_id.unwrap_or(114514);
-    let song_file = song_file.unwrap_or(target_id.to_string() + ".mp3");
-    let background_file = background_file.unwrap_or(target_id.to_string() + ".png");
-    let output_path = output_path.unwrap_or(target_id.to_string() + ".json");
+fn run(args: Args) -> Result<(), Box<dyn error::Error>> {
+    let (midi_path, sepration_rate, speed, output_path, song_file, background_file) =
+        process_args(args);
     let mut chart = RPEChart::default();
-    let file = fs::read(&name)?;
+    let file = fs::read(&midi_path)?;
     let smf = Smf::parse(&file)?;
     let ticks_per_beat = match smf.header.timing {
         Timing::Metrical(t) => t.as_int() as u32,
@@ -288,9 +290,44 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn fill_meta(meta: &mut RPEMetadata, smf: &Smf, song: String, background: String) {
-    meta.background = background;
-    meta.song = song;
+fn process_args(args: Args) -> (PathBuf, Option<f32>, Option<f32>, PathBuf, PathBuf, PathBuf) {
+    let Args {
+        midi_path,
+        target_id,
+        song_file,
+        background_file,
+        output_path,
+        sepration_rate,
+        speed,
+    } = args;
+    let mut output_path = output_path.unwrap_or_default();
+    if let Some(id) = target_id {
+        output_path = (id.to_string() + ".json").into();
+    } else if output_path.is_dir() || output_path.as_os_str().len() == 0 {
+        let file_name = midi_path.file_stem().unwrap_or(OsStr::new("result"));
+        output_path.push(file_name);
+        output_path.set_extension("json");
+    }
+    let target_id = target_id.unwrap_or(114514);
+    let song_file = song_file.unwrap_or((target_id.to_string() + ".mp3").into());
+    let background_file = background_file.unwrap_or((target_id.to_string() + ".png").into());
+    (
+        midi_path,
+        sepration_rate,
+        speed,
+        output_path,
+        song_file,
+        background_file,
+    )
+}
+
+fn fill_meta(meta: &mut RPEMetadata, smf: &Smf, song: PathBuf, background: PathBuf) {
+    meta.background = background
+        .file_name()
+        .map_or("missingno".into(), |a| a.to_string_lossy().into_owned());
+    meta.song = song
+        .file_name()
+        .map_or("missingno".into(), |a| a.to_string_lossy().into_owned());
     let mut meta_tracks = smf.tracks.iter().filter(|t| ismeta(t));
     let name = meta_tracks.find_map(track_name);
     let name = name
