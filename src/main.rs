@@ -17,14 +17,14 @@ use midly::{
     num::{u24, u7},
     MetaMessage, MidiMessage, Smf, Timing, Track, TrackEvent, TrackEventKind,
 };
-use serde::{Deserialize, Serialize};
+use serde::{ Serialize, Deserialize};
 
 pub const RPE_WIDTH: f32 = 1350.;
 pub const PIANO_KEY_COUNT: u8 = 88;
 pub const C4_POS: u8 = 60;
 pub const A0_POS: u8 = 21;
 
-#[derive(Clone, Copy, Deserialize, Serialize)]
+#[derive(Clone, Copy,  Serialize)]
 #[serde(rename_all = "lowercase")]
 #[repr(usize)]
 pub enum UIElement {
@@ -36,36 +36,29 @@ pub enum UIElement {
     Name,
     Level,
 }
-#[derive(serde::Deserialize, Serialize, Clone, Devault)]
+#[derive(Deserialize, Serialize, Clone, Devault)]
 #[devault("Triple(0,0,1)")]
 pub struct Triple(i32, u32, u32);
-#[derive(Deserialize, Serialize, Default)]
+#[derive( Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct RPEBpmItem {
     bpm: f32,
     start_time: Triple,
 }
 
-// serde is weird...
-fn f32_zero() -> f32 {
-    0.
-}
 
-fn f32_one() -> f32 {
-    1.
-}
 
 #[derive(Deserialize, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct RPEEvent<T = f32> {
     // TODO linkgroup
-    #[serde(default = "f32_zero")]
+    
     easing_left: f32,
-    #[serde(default = "f32_one")]
+    
     easing_right: f32,
-    #[serde(default)]
+    
     bezier: u8,
-    #[serde(default)]
+    
     bezier_points: [f32; 4],
     easing_type: i32,
     start: T,
@@ -109,10 +102,10 @@ impl Default for RPEEventLayer {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize, Default)]
+#[derive(Serialize, Default)]
 struct RGBColor(u8, u8, u8);
 
-#[derive(Deserialize, Serialize, Default)]
+#[derive( Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct RPEExtendedEvents {
     color_events: Option<Vec<RPEEvent<RGBColor>>>,
@@ -123,7 +116,7 @@ struct RPEExtendedEvents {
     paint_events: Option<Vec<RPEEvent>>,
 }
 
-#[derive(Deserialize, Serialize, Devault)]
+#[derive( Serialize, Devault)]
 #[serde(rename_all = "camelCase")]
 struct RPENote {
     // TODO above == 0? what does that even mean?
@@ -137,7 +130,7 @@ struct RPENote {
     y_offset: f32,
     #[devault("255")]
     alpha: u16, // some alpha has 256...
-    #[serde(default = "f32_one")]
+    
     #[devault("1.0")]
     size: f32,
     #[devault("1.0")]
@@ -151,7 +144,7 @@ fn default_event_layer() -> Vec<Option<RPEEventLayer>> {
     vec![Some(Default::default())]
 }
 
-#[derive(Deserialize, Serialize, Devault)]
+#[derive( Serialize, Devault)]
 #[serde(rename_all = "camelCase")]
 struct RPEJudgeLine {
     #[serde(rename = "Group")]
@@ -171,13 +164,13 @@ struct RPEJudgeLine {
     num_of_notes: usize,
     #[devault("1")]
     is_cover: u8,
-    #[serde(default)]
+    
     z_order: i32,
     #[serde(rename = "attachUI")]
     attach_ui: Option<UIElement>,
 }
 
-#[derive(Deserialize, Serialize, Default)]
+#[derive( Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct RPEMetadata {
     offset: i32,
@@ -190,7 +183,7 @@ struct RPEMetadata {
     background: String,
 }
 
-#[derive(Deserialize, Serialize, Default)]
+#[derive( Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct RPEChart {
     #[serde(rename = "META")]
