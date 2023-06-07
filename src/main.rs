@@ -1,3 +1,4 @@
+///! Midi to RPE json.
 ///! All the RPE Chart structure definitions are from [prpr](https://github.com/Mivik/prpr).
 use std::{
     borrow::Cow,
@@ -8,8 +9,17 @@ use std::{
 };
 
 use clap::Parser;
-use midly::{num::u24, MetaMessage, MidiMessage, Smf, Timing, Track, TrackEvent, TrackEventKind};
+use devault::Devault;
+use midly::{
+    num::{u24, u7},
+    MetaMessage, MidiMessage, Smf, Timing, Track, TrackEvent, TrackEventKind,
+};
 use serde::{Deserialize, Serialize};
+
+pub const RPE_WIDTH: f32 = 1350.;
+pub const PIANO_KEY_COUNT: u8 = 88;
+pub const C4_POS: u8 = 60;
+pub const A0_POS: u8 = 21;
 
 #[derive(Clone, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -23,13 +33,9 @@ pub enum UIElement {
     Name,
     Level,
 }
-#[derive(serde::Deserialize, Serialize)]
+#[derive(serde::Deserialize, Serialize, Clone, Devault)]
+#[devault("Triple(0,0,1)")]
 pub struct Triple(i32, u32, u32);
-impl Default for Triple {
-    fn default() -> Self {
-        Self(0, 0, 1)
-    }
-}
 #[derive(Deserialize, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct RPEBpmItem {
@@ -84,7 +90,7 @@ struct RPESpeedEvent {
     end: f32,
 }
 
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RPEEventLayer {
     alpha_events: Option<Vec<RPEEvent>>,
@@ -92,6 +98,12 @@ struct RPEEventLayer {
     move_y_events: Option<Vec<RPEEvent>>,
     rotate_events: Option<Vec<RPEEvent>>,
     speed_events: Option<Vec<RPESpeedEvent>>,
+}
+const DEFAULT_EVENT_LAYER: &str = include_str!("../default_event_layer.json");
+impl Default for RPEEventLayer {
+    fn default() -> Self {
+        serde_json::from_str(DEFAULT_EVENT_LAYER).unwrap()
+    }
 }
 
 #[derive(Clone, Deserialize, Serialize, Default)]
@@ -108,32 +120,40 @@ struct RPEExtendedEvents {
     paint_events: Option<Vec<RPEEvent>>,
 }
 
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Deserialize, Serialize, Devault)]
 #[serde(rename_all = "camelCase")]
 struct RPENote {
     // TODO above == 0? what does that even mean?
     #[serde(rename = "type")]
     kind: u8,
+    #[devault("1")]
     above: u8,
     start_time: Triple,
     end_time: Triple,
     position_x: f32,
     y_offset: f32,
-    #[serde(default="full_alpha")]
+    #[devault("255")]
     alpha: u16, // some alpha has 256...
-    #[serde(default="f32_one")]
+    #[serde(default = "f32_one")]
+    #[devault("1.0")]
     size: f32,
+    #[devault("1.0")]
     speed: f32,
     is_fake: u8,
+    #[devault("999999.0")]
     visible_time: f32,
 }
-fn full_alpha() -> u16 {
-    255
+
+fn default_event_layer() -> Vec<Option<RPEEventLayer>> {
+    vec![Some(Default::default())]
 }
-#[derive(Deserialize, Serialize, Default)]
+
+#[derive(Deserialize, Serialize, Devault)]
 #[serde(rename_all = "camelCase")]
 struct RPEJudgeLine {
-    // TODO group
+    #[serde(rename = "Group")]
+    #[devault("0")]
+    group: i32,
     // TODO alphaControl, bpmfactor
     #[serde(rename = "Name")]
     name: String,
@@ -141,29 +161,25 @@ struct RPEJudgeLine {
     texture: String,
     #[serde(rename = "father")]
     parent: Option<isize>,
+    #[devault("default_event_layer()")]
     event_layers: Vec<Option<RPEEventLayer>>,
     extended: Option<RPEExtendedEvents>,
     notes: Vec<RPENote>,
+    num_of_notes: usize,
+    #[devault("1")]
     is_cover: u8,
     #[serde(default)]
     z_order: i32,
     #[serde(rename = "attachUI")]
     attach_ui: Option<UIElement>,
-
-    #[serde(default)]
-    pos_control: Vec<RPECtrlEvent>,
-    #[serde(default)]
-    size_control: Vec<RPECtrlEvent>,
-    #[serde(default)]
-    alpha_control: Vec<RPECtrlEvent>,
-    #[serde(default)]
-    y_control: Vec<RPECtrlEvent>,
 }
 
 #[derive(Deserialize, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct RPEMetadata {
     offset: i32,
+    #[serde(rename = "RPEVersion")]
+    rpe_version: i32,
     charter: String,
     composer: String,
     name: String,
@@ -228,9 +244,16 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     let output_path = output_path.unwrap_or(target_id.to_string() + ".json");
     let mut chart = RPEChart::default();
     let file = fs::read(&name)?;
-    let smf = dbg!(Smf::parse(&file)?);
+    let smf = Smf::parse(&file)?;
+    let ticks_per_beat = match smf.header.timing {
+        Timing::Metrical(t) => t.as_int() as u32,
+        _ => Err(midly::Error::new(&midly::ErrorKind::Invalid(
+            "We support tick per beat times only.",
+        )))?,
+    };
     fill_meta(&mut chart.meta, &smf, song_file, background_file);
-    fill_bpm(&mut chart.bpm_list, &smf)?;
+    fill_bpm(&mut chart.bpm_list, &smf, ticks_per_beat);
+    fill_lines(&mut chart, &smf, ticks_per_beat);
     serde_json::to_writer(File::create(output_path)?, &chart)?;
     Ok(())
 }
@@ -246,41 +269,30 @@ fn fill_meta(meta: &mut RPEMetadata, smf: &Smf, song: String, background: String
     meta.name = name;
 }
 
-fn fill_lines(chart: &mut RPEChart, smf: &Smf) -> Result<(), midly::Error>  {
-    let ticks_per_beat = match smf.header.timing {
-        Timing::Metrical(t) => t.as_int() as u32,
-        _ => Err(midly::Error::new(&midly::ErrorKind::Invalid(
-            "We support tick per beat times only.",
-        )))?,
-    };
-    // chart.judge_line_list = smf.tracks.iter().filter(ismeta).map();
-    Ok(())
+fn fill_lines(chart: &mut RPEChart, smf: &Smf, ticks_per_beat: u32) {
+    chart.judge_line_list = smf
+        .tracks
+        .iter()
+        .filter(|t| !ismeta(t))
+        .map(|t| midi_track_to_judge_line(t, ticks_per_beat))
+        .collect();
 }
 
 fn ismeta(t: &Vec<TrackEvent>) -> bool {
     t.iter().all(|e| matches!(e.kind, TrackEventKind::Meta(_)))
 }
 
-fn fill_bpm(bpm: &mut Vec<RPEBpmItem>, smf: &Smf) -> Result<(), midly::Error> {
-    *bpm = events_to_bpm(
-        smf.tracks.iter().flatten(),
-        match smf.header.timing {
-            Timing::Metrical(t) => t.as_int() as u32,
-            _ => Err(midly::Error::new(&midly::ErrorKind::Invalid(
-                "We support tick per beat times only.",
-            )))?,
-        },
-    );
-    Ok(())
+fn fill_bpm(bpm: &mut Vec<RPEBpmItem>, smf: &Smf, ticks_per_beat: u32) {
+    *bpm = events_to_bpm(smf.tracks.iter().flatten(), ticks_per_beat);
 }
 
-fn midiTrackToJudgeLine(track: &Track,
-    ticks_per_beat:u32) -> RPEJudgeLine{
-        let mut  line= RPEJudgeLine::default();
-        line.name = track_name(track).unwrap_or_default().to_string();
-        line.notes = midi_track_to_notes(track, ticks_per_beat);
-        line
-    }
+fn midi_track_to_judge_line(track: &Track, ticks_per_beat: u32) -> RPEJudgeLine {
+    let mut line = RPEJudgeLine::default();
+    line.name = track_name(track).unwrap_or_default().to_string();
+    line.notes = midi_track_to_notes(track, ticks_per_beat);
+    line.num_of_notes = line.notes.len();
+    line
+}
 
 fn midi_track_to_notes(track: &Track, ticks_per_beat: u32) -> Vec<RPENote> {
     let mut current_tick = 0;
@@ -290,25 +302,29 @@ fn midi_track_to_notes(track: &Track, ticks_per_beat: u32) -> Vec<RPENote> {
         let mut ret = RPENote::default();
         match event.kind {
             TrackEventKind::Midi {
-                message: MidiMessage::NoteOn { key,..},
+                message: MidiMessage::NoteOn { key, .. },
                 ..
             } => {
-                ret.start_time = tick_to_rpe_time(current_tick, ticks_per_beat);
-                ret.position_x = 0.0; //TODO: midiPitchToXValue
-            },
-            TrackEventKind::Midi {
-                message: MidiMessage::NoteOff { key,..},
-                ..
-            } =>  {
-                ret.start_time = tick_to_rpe_time(current_tick, ticks_per_beat);
-                ret.position_x = 0.0; //TODO: midiPitchToXValue
-            },
+                fill_note(&mut ret, current_tick, ticks_per_beat, key);
+            }
+            // TrackEventKind::Midi {
+            //     message: MidiMessage::NoteOff { key, .. },
+            //     ..
+            // } => {
+            //     fill_note(&mut ret, current_tick, ticks_per_beat, key);
+            // }
 
             _ => return None,
         };
         Some(ret)
     };
     track.iter().filter_map(|e| _event_to_note(e)).collect()
+}
+
+fn fill_note(ret: &mut RPENote, current_tick: u32, ticks_per_beat: u32, key: u7) {
+    ret.start_time = tick_to_rpe_time(current_tick, ticks_per_beat);
+    ret.end_time = ret.start_time.clone();
+    ret.position_x = key_to_x_value(key);
 }
 
 fn track_name<'a>(track: &Track<'a>) -> Option<Cow<'a, str>> {
@@ -329,6 +345,11 @@ fn tick_to_rpe_time(tick: u32, ticks_per_beat: u32) -> Triple {
         tick % ticks_per_beat,
         ticks_per_beat,
     )
+}
+
+fn key_to_x_value(key: u7) -> f32 {
+    // C4(the middle c) is on center.
+    (key.as_int() as i8 - C4_POS as i8) as f32 / (PIANO_KEY_COUNT as f32) * RPE_WIDTH
 }
 
 fn events_to_bpm<'a>(
@@ -355,12 +376,20 @@ mod test {
     #[test]
     fn test() {
         run(Args {
-            midi_path: "test_assets/pi.mid".into(),
+            midi_path: "test_assets/town.mid".into(),
             target_id: 0,
             song_file: None,
             background_file: None,
             output_path: Some("generated".into()),
         })
         .unwrap();
+    }
+    #[test]
+    fn c4_on_center() {
+        assert_eq!(key_to_x_value(u7::from_int_lossy(C4_POS)) as i32, 0)
+    }
+    #[test]
+    fn a0_on_lowest() {
+        assert_eq!(key_to_x_value(u7::from_int_lossy(A0_POS)) as i32, 0.0 as i32)
     }
 }

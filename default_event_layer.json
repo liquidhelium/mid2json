@@ -1,0 +1,55 @@
+{
+    "alphaEvents": [{
+        "easingType": 1,
+        "end": 200,
+        "endTime": [1, 0, 1],
+        "linkgroup": 0,
+        "start": 0,
+        "startTime": [0, 1, 4]
+    }],
+    "moveXEvents": [{
+        "easingType": 1,
+        "end": 0.0,
+        "endTime": [0, 1, 8],
+        "linkgroup": 0,
+        "start": 0.0,
+        "startTime": [0, 0, 1]
+    }, {
+        "easingType": 1,
+        "end": 0.0,
+        "endTime": [1, 0, 1],
+        "linkgroup": 0,
+        "start": 0.0,
+        "startTime": [0, 1, 8]
+    }],
+    "moveYEvents": [{
+        "easingType": 1,
+        "end": -450.0,
+        "endTime": [0, 1, 8],
+        "linkgroup": 0,
+        "start": -450.0,
+        "startTime": [0, 0, 1]
+    }, {
+        "easingType": 18,
+        "end": -250.0,
+        "endTime": [1, 0, 1],
+        "linkgroup": 0,
+        "start": -450.0,
+        "startTime": [0, 1, 8]
+    }],
+    "rotateEvents": [{
+        "easingType": 1,
+        "end": 0.0,
+        "endTime": [1, 0, 1],
+        "linkgroup": 0,
+        "start": 0.0,
+        "startTime": [0, 0, 1]
+    }],
+    "speedEvents": [{
+        "end": 8.0,
+        "endTime": [1, 0, 1],
+        "linkgroup": 0,
+        "start": 8.0,
+        "startTime": [0, 0, 1]
+    }]
+}
