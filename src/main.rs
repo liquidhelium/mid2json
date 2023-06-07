@@ -265,6 +265,12 @@ fn run(args: Args) -> Result<(), Box<dyn error::Error>> {
     fill_meta(&mut chart.meta, &smf, song_file, background_file);
     fill_bpm(&mut chart.bpm_list, &smf, ticks_per_beat);
     fill_lines(&mut chart, &smf, ticks_per_beat);
+    post_process(sepration_rate, &mut chart, speed);
+    serde_json::to_writer(File::create(output_path)?, &chart)?;
+    Ok(())
+}
+
+fn post_process(sepration_rate: Option<f32>, chart: &mut RPEChart, speed: Option<f32>) {
     if let Some(rate) = sepration_rate {
         chart
             .judge_line_list
@@ -286,8 +292,6 @@ fn run(args: Args) -> Result<(), Box<dyn error::Error>> {
             }
         })
     }
-    serde_json::to_writer(File::create(output_path)?, &chart)?;
-    Ok(())
 }
 
 fn process_args(args: Args) -> (PathBuf, Option<f32>, Option<f32>, PathBuf, PathBuf, PathBuf) {
