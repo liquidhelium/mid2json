@@ -1,5 +1,4 @@
 ///! Midi to RPE json.
-///! All the RPE Chart structure definitions are from [prpr](https://github.com/Mivik/prpr).
 use std::{
     error,
     ffi::OsStr,

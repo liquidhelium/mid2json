@@ -1,3 +1,4 @@
+///! All the RPE Chart structure definitions are from [prpr](https://github.com/Mivik/prpr).
 use std::collections::HashMap;
 
 pub const RPE_WIDTH: f32 = 1350.;
